@@ -29,15 +29,45 @@ bot_client = TelegramClient('bot_session', api_id, api_hash)
 
 # Variabel global untuk menghitung total sesi
 total_sessions = 0
-MAX_SESSIONS = 4  # Batas maksimal sesi (ubah menjadi 10)
+MAX_SESSIONS = 2  # Batas maksimal sesi (ubah menjadi 10)
 
 # Dictionary untuk menyimpan sesi pengguna sementara
 user_sessions = {}  # Struktur: {user_id: [{'client': TelegramClient, 'phone': str}]}
+
+# Fungsi untuk memuat semua sesi yang ada di folder sessions/
+async def load_existing_sessions():
+    global total_sessions
+
+    # Loop melalui semua file sesi yang ada
+    for session_file in os.listdir(SESSION_DIR):
+        if session_file.endswith('.session'):
+            session_path = os.path.join(SESSION_DIR, session_file)
+            user_id, phone = session_file.split('_')[0], session_file.split('_')[1].replace('.session', '')
+            
+            try:
+                # Membuat client baru dengan sesi yang ada
+                user_client = TelegramClient(session_path, api_id, api_hash)
+                await user_client.connect()
+
+                if await user_client.is_user_authorized():
+                    # Jika sesi valid, tambahkan ke user_sessions
+                    if user_id not in user_sessions:
+                        user_sessions[user_id] = []
+                    user_sessions[user_id].append({"client": user_client, "phone": phone})
+                    total_sessions += 1  # Increment sesi
+                    print(f"✅ Sesi untuk {phone} berhasil dimuat.")
+                else:
+                    await user_client.disconnect()
+                    os.remove(session_path)  # Hapus sesi yang tidak valid
+                    print(f"⚠️ Sesi untuk {phone} tidak valid, dihapus.")
+            except Exception as e:
+                print(f"⚠️ Gagal memuat sesi untuk {session_file}: {e}")
 
 @bot_client.on(events.NewMessage(pattern='/start'))
 async def start(event):
     await event.reply(
         "Selamat datang di bot multi-login! 😊\n"
+        "Bot akan mati setiap tanggal 24, hubungi @Cloebe jika ingin memperpanjang\n"
         "Masukkan nomor telepon Anda dengan mengetik:\n"
         "`/login <Nomor Telepon>` (contoh: /login +628123456789)\n\n"
         "BACA! : 2 Verifikasi harus mati / Matikan password pada account yang mau dijadiin bot"
@@ -143,17 +173,9 @@ async def logout(event):
     if os.path.exists(session_file):
         os.remove(session_file)
         total_sessions -= 1  # Kurangi jumlah total sesi
-
-        # Hapus juga dari user_sessions
-        if user_id in user_sessions:
-            user_sessions[user_id] = [s for s in user_sessions[user_id] if s["phone"] != phone]
-            if not user_sessions[user_id]:
-                del user_sessions[user_id]
-
         await event.reply(f"✅ Berhasil logout untuk nomor {phone}.")
     else:
         await event.reply(f"⚠️ Tidak ada sesi aktif untuk nomor {phone}.")
-
 
 @bot_client.on(events.NewMessage(pattern='/list'))
 async def list_accounts(event):
@@ -179,39 +201,53 @@ async def list_accounts(event):
                           f"Total akun yang login: {total_sessions}/{MAX_SESSIONS}")
 
 
+
 @bot_client.on(events.NewMessage(pattern='/resetall'))
 async def reset_all_sessions(event):
     global total_sessions  # Mengakses variabel global
 
     print("Perintah /resetall diterima!")  # Log untuk memastikan perintah diterima
     
-    try:
-        for user_id in list(user_sessions.keys()):
-            for user_data in user_sessions[user_id]:
-                user_client = user_data["client"]
-                session_file = user_client.session.filename
+    # Menghapus semua sesi
+    for user_id in user_sessions.keys():
+        for user_data in user_sessions[user_id]:
+            user_client = user_data["client"]
+            await user_client.disconnect()  # Disconnect semua client
+            session_file = user_data["client"].session.filename
+            print(f"Deleting session file: {session_file}")  # Log untuk melihat file sesi yang dihapus
+            os.remove(session_file)  # Hapus file sesi
+    user_sessions.clear()  # Hapus data sesi
+    total_sessions = 0  # Reset total sesi ke 0
+    await event.reply("✅ Semua sesi telah direset.")
+    print("Semua sesi telah direset.")  # Log untuk memastikan proses selesai
 
-                try:
-                    await user_client.disconnect()
-                except Exception as e:
-                    print(f"Gagal disconnect client: {e}")
 
-                if os.path.exists(session_file):
-                    print(f"Deleting session file: {session_file}")
-                    try:
-                        os.remove(session_file)
-                    except Exception as e:
-                        print(f"❌ Gagal menghapus file sesi: {e}")
+@bot_client.on(events.NewMessage(pattern='/getsession'))
+async def get_all_sessions(event):
+    admin_id = 7869529077  # Ganti jika admin ID-nya berbeda
+    sender = await event.get_sender()
 
-        user_sessions.clear()
-        total_sessions = 0
+    if sender.id != admin_id:
+        await event.reply("❌ Anda tidak memiliki izin untuk menggunakan perintah ini.")
+        return
 
-        await event.reply("✅ Semua sesi telah direset.")
-        print("Semua sesi telah direset.")
-    except Exception as e:
-        await event.reply(f"⚠️ Gagal mereset sesi: {e}")
-        print(f"Gagal mereset sesi: {e}")
+    session_files = [
+        os.path.join(SESSION_DIR, f)
+        for f in os.listdir(SESSION_DIR)
+        if f.endswith('.session')
+    ]
 
+    if not session_files:
+        await event.reply("⚠️ Tidak ada file sesi yang ditemukan.")
+        return
+
+    await event.reply(f"📦 Mengirim total {len(session_files)} file sesi...")
+
+    for session_path in session_files:
+        try:
+            await event.respond(file=session_path)
+        except Exception as e:
+            await event.respond(f"⚠️ Gagal mengirim: `{os.path.basename(session_path)}`\nError: {e}")
 
 
 @bot_client.on(events.NewMessage(pattern='/help'))

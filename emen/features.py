@@ -16,7 +16,6 @@ blacklist = set()
 auto_replies = defaultdict(str)  # {user_id: auto_reply_message}
 
 def parse_interval(interval_str):
-    """Konversi format [10s, 1m, 2h, 1d] menjadi detik."""
     match = re.match(r'^(\d+)([smhd])$', interval_str)
     if not match:
         return None
@@ -25,14 +24,10 @@ def parse_interval(interval_str):
     return value * {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}[unit]
 
 def get_today_date():
-    """Mengembalikan tanggal hari ini dalam format YYYY-MM-DD."""
     return datetime.now().strftime("%Y-%m-%d")
 
 async def configure_event_handlers(client, user_id):
-    """Konfigurasi semua fitur bot untuk user_id tertentu."""
-
-    # Spam pesan ke grup dengan interval tertentu
-    @client.on(events.NewMessage(pattern=r'^eme hastle (.+) (\d+[smhd])$'))
+    @client.on(events.NewMessage(pattern=r'^emen hastle (.+) (\d+[smhd])$'))
     async def hastle_handler(event):
         custom_message, interval_str = event.pattern_match.groups()
         group_id = event.chat_id
@@ -54,12 +49,10 @@ async def configure_event_handlers(client, user_id):
                 await asyncio.sleep(interval)
             except errors.FloodWaitError as e:
                 await asyncio.sleep(e.seconds)
-            except Exception as e:
-                # Menangani error tanpa output log
+            except Exception:
                 active_groups[group_id][user_id] = False
 
-    # Hentikan spam di grup
-    @client.on(events.NewMessage(pattern=r'^eme stop$'))
+    @client.on(events.NewMessage(pattern=r'^emen stop$'))
     async def stop_handler(event):
         group_id = event.chat_id
         if active_groups[group_id][user_id]:
@@ -68,13 +61,11 @@ async def configure_event_handlers(client, user_id):
         else:
             await event.reply("⚠️ Tidak ada spam yang berjalan untuk akun Anda di grup ini.")
 
-    # Tes koneksi bot
-    @client.on(events.NewMessage(pattern=r'^eme ping$'))
+    @client.on(events.NewMessage(pattern=r'^emen ping$'))
     async def ping_handler(event):
         await event.reply("🏓 Pong! Bot aktif.")
 
-    # Broadcast pesan ke semua chat kecuali blacklist
-    @client.on(events.NewMessage(pattern=r'^eme bcstar (.+)$'))
+    @client.on(events.NewMessage(pattern=r'^emen bcstar (.+)$'))
     async def broadcast_handler(event):
         custom_message = event.pattern_match.group(1)
         await event.reply(f"✅ Memulai broadcast ke semua chat: {custom_message}")
@@ -83,12 +74,10 @@ async def configure_event_handlers(client, user_id):
                 continue
             try:
                 await client.send_message(dialog.id, custom_message)
-            except Exception as e:
-                # Menangani error tanpa output log
+            except Exception:
                 pass
 
-    # Broadcast pesan hanya ke grup dengan interval tertentu
-    @client.on(events.NewMessage(pattern=r'^eme bcstargr(\d+) (\d+[smhd]) (.+)$'))
+    @client.on(events.NewMessage(pattern=r'^emen bcstargr(\d+) (\d+[smhd]) (.+)$'))
     async def broadcast_group_handler(event):
         group_number = event.pattern_match.group(1)
         interval_str, custom_message = event.pattern_match.groups()[1:]
@@ -109,13 +98,11 @@ async def configure_event_handlers(client, user_id):
                 if dialog.is_group and dialog.id not in blacklist:
                     try:
                         await client.send_message(dialog.id, custom_message)
-                    except Exception as e:
-                        # Menangani error tanpa output log
+                    except Exception:
                         pass
             await asyncio.sleep(interval)
 
-    # Hentikan broadcast grup
-    @client.on(events.NewMessage(pattern=r'^eme stopbcstargr(\d+)$'))
+    @client.on(events.NewMessage(pattern=r'^emen stopbcstargr(\d+)$'))
     async def stop_broadcast_group_handler(event):
         group_number = event.pattern_match.group(1)
         if active_bc_interval[user_id][f"group{group_number}"]:
@@ -124,15 +111,13 @@ async def configure_event_handlers(client, user_id):
         else:
             await event.reply(f"⚠️ Tidak ada broadcast grup {group_number} yang berjalan.")
 
-    # Tambahkan grup/chat ke blacklist
-    @client.on(events.NewMessage(pattern=r'^eme bl$'))
+    @client.on(events.NewMessage(pattern=r'^emen bl$'))
     async def blacklist_handler(event):
         chat_id = event.chat_id
         blacklist.add(chat_id)
         await event.reply("✅ Grup ini telah ditambahkan ke blacklist.")
 
-    # Hapus grup/chat dari blacklist
-    @client.on(events.NewMessage(pattern=r'^eme unbl$'))
+    @client.on(events.NewMessage(pattern=r'^emen unbl$'))
     async def unblacklist_handler(event):
         chat_id = event.chat_id
         if chat_id in blacklist:
@@ -141,63 +126,62 @@ async def configure_event_handlers(client, user_id):
         else:
             await event.reply("⚠️ Grup ini tidak ada dalam blacklist.")
 
-    # Tampilkan daftar perintah
-    @client.on(events.NewMessage(pattern=r'^eme help$'))
+    @client.on(events.NewMessage(pattern=r'^emen help$'))
     async def help_handler(event):
         help_text = (
             "📋 **Daftar Perintah yang Tersedia:**\n\n"
-            "1. eme hastle [pesan] [waktu][s/m/h/d]\n"
+            "1. emen hastle [pesan] [waktu][s/m/h/d]\n"
             "   Spam pesan di grup dengan interval tertentu.\n"
-            "2. eme stop\n"
+            "2. emen stop\n"
             "   Hentikan spam di grup.\n"
-            "3. eme ping\n"
+            "3. emen ping\n"
             "   Tes koneksi bot.\n"
-            "4. eme bcstar [pesan]\n"
+            "4. emen bcstar [pesan]\n"
             "   Broadcast ke semua chat kecuali blacklist.\n"
-            "5. eme bcstargr [waktu][s/m/h/d] [pesan]\n"
+            "5. emen bcstargr [waktu][s/m/h/d] [pesan]\n"
             "   Broadcast hanya ke grup dengan interval tertentu.\n"
-            "6. eme stopbcstargr[1-10]\n"
+            "6. emen stopbcstargr[1-10]\n"
             "   Hentikan broadcast ke grup tertentu.\n"
-            "7. eme bl\n"
-            "    Tambahkan grup/chat ke blacklist.\n"
-            "8. eme unbl\n"
-            "    Hapus grup/chat dari blacklist.\n"
-            "9. eme setreply\n"
-            "    Mengatur balasan otomatis (auto-reply) untuk pesan masuk.\n"
-            "10. eme stopall\n"
-            "    Hentikan semua pengaturan dan broadcast yang sedang berjalan.\n"
+            "7. emen bl\n"
+            "   Tambahkan grup/chat ke blacklist.\n"
+            "8. emen unbl\n"
+            "   Hapus grup/chat dari blacklist.\n"
         )
         await event.reply(help_text)
 
-    @client.on(events.NewMessage(pattern=r'^eme setreply'))
+    @client.on(events.NewMessage(pattern=r'^emen setreply'))
     async def set_auto_reply(event):
+        me = await client.get_me()
+        uid = me.id
+
         message_lines = event.raw_text.split('\n', 1)
         if len(message_lines) < 2:
-            await event.reply("⚠️ Harap isi auto-reply setelah baris pertama.\nContoh:\neme setreply\nHalo ini balasan otomatis.")
+            await event.reply("⚠️ Harap isi auto-reply setelah baris pertama.\nContoh:\nemen setreply\nHalo ini balasan otomatis.")
             return
 
         reply_message = message_lines[1]
-        auto_replies[user_id] = reply_message
+        auto_replies[uid] = reply_message
         await event.reply("✅ Auto-reply berhasil diatur.")
 
-    # Menangani auto-reply
     @client.on(events.NewMessage(incoming=True))
     async def auto_reply_handler(event):
-        if event.is_private and user_id in auto_replies and auto_replies[user_id]:
-            try:
-                sender = await event.get_sender()
-                peer = InputPeerUser(sender.id, sender.access_hash)
-                await client.send_message(peer, auto_replies[user_id])
-                await client.send_read_acknowledge(peer)
-            except errors.rpcerrorlist.UsernameNotOccupiedError:
-                pass  # Jangan tampilkan error
-            except errors.rpcerrorlist.FloodWaitError as e:
-                pass  # Jangan tampilkan error
-            except Exception as e:
-                pass  # Jangan tampilkan error
+        if event.is_private:
+            me = await client.get_me()
+            uid = me.id
+            if uid in auto_replies and auto_replies[uid]:
+                try:
+                    sender = await event.get_sender()
+                    peer = InputPeerUser(sender.id, sender.access_hash)
+                    await client.send_message(peer, auto_replies[uid])
+                    await client.send_read_acknowledge(peer)
+                except errors.rpcerrorlist.UsernameNotOccupiedError:
+                    pass
+                except errors.rpcerrorlist.FloodWaitError:
+                    pass
+                except Exception:
+                    pass
 
-    # Hentikan semua pengaturan
-    @client.on(events.NewMessage(pattern=r'^eme stopall$'))
+    @client.on(events.NewMessage(pattern=r'^emen stopall$'))
     async def stop_all_handler(event):
         for group_key in active_bc_interval[user_id].keys():
             active_bc_interval[user_id][group_key] = False
@@ -208,4 +192,4 @@ async def configure_event_handlers(client, user_id):
         for group_key in active_bc_interval[user_id].keys():
             if active_bc_interval[user_id][group_key]:
                 active_bc_interval[user_id][group_key] = False
-        await event.reply("\u2705 Semua pengaturan telah direset dan semua broadcast dihentikan.")
+        await event.reply("✅ Semua pengaturan telah direset dan semua broadcast dihentikan.")
